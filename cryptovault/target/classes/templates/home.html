@@ -1,0 +1,529 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CryptoVault • Enterprise Command Center</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vanta@latest/dist/vanta.net.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/vanilla-tilt/1.8.1/vanilla-tilt.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
+    <style>
+        /* --- CORE THEME & VARIABLES --- */
+        :root { 
+            --primary: #00ffa3; 
+            --primary-glow: rgba(0, 255, 163, 0.4);
+            --secondary: #00d1ff;
+            --bg: #030303; 
+            --card: rgba(12, 12, 12, 0.95); 
+            --border: rgba(255, 255, 255, 0.08);
+            --danger: #ff4d4d;
+            --text-main: #ffffff;
+            --text-dim: #777777;
+        }
+
+        /* --- LAYOUT RESET --- */
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            min-height: 220vh; /* Extended for scroll animation */
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+        }
+
+        /* --- 3D BACKGROUND LAYER --- */
+        #vanta-canvas {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: -2;
+        }
+
+        /* --- CINEMATIC INTRO (The Splash) --- */
+        #splash-container {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 100;
+            pointer-events: none;
+            transition: opacity 0.5s ease-out;
+        }
+
+        #splash-text {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 9rem;
+            font-weight: 800;
+            color: var(--primary);
+            text-shadow: 0 0 80px var(--primary-glow);
+            letter-spacing: -6px;
+            margin: 0;
+            text-transform: uppercase;
+            transition: transform 0.1s linear;
+        }
+
+        #splash-subtext {
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-dim);
+            letter-spacing: 12px;
+            font-size: 0.9rem;
+            margin-top: 10px;
+            text-transform: uppercase;
+        }
+
+        /* --- MAIN DASHBOARD WRAPPER --- */
+        .app-reveal-wrap {
+            position: relative;
+            padding-top: 100vh; /* Appears after first 100vh of scroll */
+            z-index: 10;
+        }
+
+        .container {
+            max-width: 1450px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            opacity: 0;
+            transform: translateY(100px);
+            transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .container.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* --- CARD ARCHITECTURE --- */
+        .card {
+            background: var(--card);
+            backdrop-filter: blur(30px);
+            border: 1px solid var(--border);
+            border-radius: 28px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 30px 70px rgba(0,0,0,0.9);
+            transform-style: preserve-3d;
+            transition: border-color 0.4s;
+        }
+        .card:hover { border-color: var(--primary-glow); }
+
+        /* --- THE HERO VALUATION --- */
+        .hero-label { font-size: 0.8rem; letter-spacing: 3px; color: var(--text-dim); text-transform: uppercase; margin-bottom: 10px; }
+        .total-val { 
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 4.5rem; 
+            color: var(--primary); 
+            font-weight: 800; 
+            text-shadow: 0 0 40px var(--primary-glow);
+            margin: 0;
+            transition: color 0.2s ease-in-out;
+        }
+
+        /* --- NAVIGATION --- */
+        .nav-scroller { display: flex; gap: 15px; margin-bottom: 40px; overflow-x: auto; padding: 5px 0; }
+        .nav-scroller a {
+            padding: 12px 26px;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-dim);
+            text-decoration: none;
+            border-radius: 15px;
+            border: 1px solid var(--border);
+            font-size: 0.9rem;
+            font-weight: 600;
+            white-space: nowrap;
+            transition: all 0.3s;
+        }
+        .nav-scroller a.active { 
+            background: var(--primary); 
+            color: #000; 
+            border-color: var(--primary);
+            box-shadow: 0 0 25px var(--primary-glow);
+        }
+
+        /* --- DATA TABLES --- */
+        table { width: 100%; border-collapse: collapse; }
+        th { color: var(--text-dim); font-size: 0.65rem; text-transform: uppercase; letter-spacing: 2px; padding: 20px 15px; text-align: left; }
+        td { padding: 20px 15px; border-bottom: 1px solid var(--border); font-size: 0.95rem; transition: background 0.3s; }
+        tr:hover td { background: rgba(255,255,255,0.02); }
+
+        .tag { background: rgba(0, 255, 163, 0.1); color: var(--primary); padding: 5px 12px; border-radius: 8px; font-family: 'JetBrains Mono'; font-weight: 700; font-size: 0.8rem; }
+
+        /* --- TRADE TERMINAL --- */
+        .terminal-header { font-size: 1.1rem; font-weight: 800; margin-bottom: 25px; border-bottom: 1px solid var(--border); padding-bottom: 15px; }
+        .trade-input, .trade-select { 
+            width: 100%; padding: 18px; background: rgba(0,0,0,0.4); 
+            border: 1px solid var(--border); color: white; border-radius: 14px; 
+            margin-top: 10px; font-size: 1rem;
+        }
+        .btn-trade { 
+            width: 100%; padding: 20px; border: none; border-radius: 14px; 
+            font-weight: 800; cursor: pointer; margin-top: 25px; 
+            text-transform: uppercase; letter-spacing: 1px; transition: 0.3s;
+        }
+        .btn-trade:hover { transform: translateY(-3px); box-shadow: 0 10px 30px var(--primary-glow); }
+
+        /* --- CUSTOM SCROLLBAR --- */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
+        ::-webkit-scrollbar-thumb { background: #222; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #333; }
+    </style>
+</head>
+<body>
+
+    <div id="vanta-canvas"></div>
+
+    <div id="splash-container">
+        <h1 id="splash-text">CRYPTO VAULT</h1>
+        <div id="splash-subtext">SCROLL TO ACCESS CORE TERMINAL</div>
+    </div>
+
+    <div class="app-reveal-wrap">
+        <div class="container" id="main-dashboard">
+            
+            <header style="display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 50px;">
+                <div>
+                    <h1 style="font-family: 'JetBrains Mono'; margin: 0; font-size: 2.2rem; color: var(--primary);">CV_CORE<span style="color:white; font-weight: 300;">.OS</span></h1>
+                    <p style="color: var(--text-dim); font-size: 0.75rem; letter-spacing: 5px; margin: 5px 0 0 0;">SYSTEM_NODES: BENGALURU_S1 // 2026</p>
+                </div>
+                <div style="text-align: right; font-family: 'JetBrains Mono'; font-size: 0.85rem; color: var(--text-dim); line-height: 1.8;">
+                    <span style="color: var(--primary);">● ONLINE_ENCRYPTED</span><br>
+                    <span id="currentTime" style="color: white; font-weight: 700;">17:22:00</span>
+                </div>
+            </header>
+
+            <div class="nav-scroller">
+                <a th:each="p : ${portfolios}" 
+                   th:href="@{/portfolio(id=${p.id})}" 
+                   th:text="${p.name}"
+                   th:class="${portfolioId == p.id} ? 'active' : ''">My Main Portfolio</a>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 420px; gap: 30px;">
+                
+                <div style="grid-column: span 2;">
+                    <div class="card" data-tilt data-tilt-max="3" data-tilt-glare data-tilt-max-glare="0.2">
+                        <div class="hero-label">Consolidated Net Equity</div>
+                        <div class="total-val">$<span id="headerTotalDisplay">0.00</span></div>
+                    </div>
+
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                        <div class="card" style="height: 300px; display: flex; flex-direction: column;">
+                            <div class="hero-label"><i class="fas fa-wave-square"></i> Real-Time Trends</div>
+                            <div style="flex-grow: 1; min-height: 0;"><canvas id="lineChart"></canvas></div>
+                        </div>
+                        <div class="card" style="height: 300px; display: flex; flex-direction: column;">
+                            <div class="hero-label"><i class="fas fa-chart-pie"></i> Asset Allocation</div>
+                            <div style="flex-grow: 1; min-height: 0;"><canvas id="pieChart"></canvas></div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="hero-label"><i class="fas fa-list"></i> Vault Holdings</div>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Asset</th>
+                                    <th>Quantity</th>
+                                    <th>Average Cost</th>
+                                    <th>Market Rate</th>
+                                    <th>Total Value</th>
+                                </tr>
+                            </thead>
+                            <tbody id="holdingsTableBody">
+                                <tr th:each="asset : ${assets}" class="asset-row">
+                                    <td><span class="tag" th:text="${asset.symbol}">BTC</span></td>
+                                    <td class="row-qty" th:text="${asset.quantity}">1.0</td>
+                                    <td style="color: var(--text-dim);" th:text="${'$' + #numbers.formatDecimal(asset.averagePurchasePrice, 1, 2)}">50000.00</td>
+                                    <td th:id="'live-price-' + ${asset.symbol}" class="live-price-cell">--</td>
+                                    <td th:id="'live-val-' + ${asset.symbol}" class="live-val-cell" style="font-weight: 800;">--</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="right-section">
+                    <div class="card trade-card-glow" data-tilt data-tilt-max="5">
+                        <div class="terminal-header"><i class="fas fa-terminal" style="color: var(--primary);"></i> Execution Terminal</div>
+                        
+                        <form th:action="@{/executeTrade}" method="post">
+                            <input type="hidden" name="portfolioId" th:value="${portfolioId}">
+                            <input type="hidden" name="type" id="tradeType" value="BUY">
+                            <input type="hidden" name="price" id="hiddenPrice" value="81409.68">
+
+                            <div style="display: flex; gap: 10px; margin-bottom: 25px; background: rgba(0,0,0,0.5); padding: 6px; border-radius: 16px; border: 1px solid var(--border);">
+                                <button type="button" onclick="setTradeType('BUY')" id="buyBtn" style="flex:1; padding: 12px; border-radius: 12px; border:none; background: var(--primary); color: #000; font-weight: 800; cursor: pointer;">BUY</button>
+                                <button type="button" onclick="setTradeType('SELL')" id="sellBtn" style="flex:1; padding: 12px; border-radius: 12px; border:none; background: transparent; color: #fff; cursor: pointer;">SELL</button>
+                            </div>
+
+                            <label class="hero-label">Instrument</label>
+                            <select name="symbol" class="trade-select" id="assetSelector" onchange="updatePrice()">
+                                <option value="BTC" data-price="81409.68">Bitcoin (BTC)</option>
+                                <option value="ETH" data-price="2315.03">Ethereum (ETH)</option>
+                                <option value="SOL" data-price="94.18">Solana (SOL)</option>
+                                <option value="XRP" data-price="1.42">Ripple (XRP)</option>
+                                <option value="BNB" data-price="652.88">Binance (BNB)</option>
+                                <option value="ADA" data-price="0.68">Cardano (ADA)</option>
+                                <option value="DOGE" data-price="0.22">Dogecoin (DOGE)</option>
+                            </select>
+
+                            <div style="margin-top: 20px;">
+                                <label class="hero-label">Quantity</label>
+                                <input type="number" step="any" name="quantity" id="tradeQty" class="trade-input" placeholder="0.00" oninput="updateTotal()">
+                            </div>
+
+                            <div style="margin: 30px 0; padding: 25px; background: rgba(255,255,255,0.02); border-radius: 20px; border: 1px dashed var(--border);">
+                                <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
+                                    <span style="color: var(--text-dim);">Live Execution Price</span>
+                                    <span id="marketPriceDisplay" style="color: var(--primary); font-family: 'JetBrains Mono';">$81,409.68</span>
+                                </div>
+                                <div style="display: flex; justify-content: space-between; font-weight: 800; margin-top: 15px; font-size: 1.3rem; border-top: 1px solid var(--border); padding-top: 15px;">
+                                    <span>ORDER TOTAL</span>
+                                    <span id="totalTradeValue" style="color: var(--secondary);">$0.00</span>
+                                </div>
+                            </div>
+
+                            <button type="submit" id="execBtn" class="btn-trade" style="background: var(--primary); color: #000;">Transmit Order</button>
+                        </form>
+                    </div>
+
+                    <div class="card" style="background: transparent; border: 1px solid var(--border); opacity: 0.8;">
+                        <p style="font-size: 0.75rem; color: var(--text-dim); margin: 0; line-height: 1.6;">
+                            <i class="fas fa-shield-check" style="color: var(--primary);"></i> AUTOPILOT ENABLED: All market rates are simulating a +0.005% upward drift. Nodes synchronized.
+                        </p>
+                    </div>
+                </div>
+            </div>
+            
+            <footer style="text-align: center; margin-top: 60px; color: #222; font-size: 0.7rem; letter-spacing: 5px;">
+                CRYPTOVAULT_TERMINAL // DEVELOPED BY M JAISWAROOP // 2026
+            </footer>
+        </div>
+    </div>
+
+    <script th:inline="javascript">
+        /*<![CDATA[*/
+        
+        // 1. GLOBAL INSTANCES
+        let vantaEffect;
+        let lineChart;
+        let pieChart;
+
+        // 2. INITIALIZATION
+        window.onload = () => {
+            // Vanta Net
+            vantaEffect = VANTA.NET({
+                el: "#vanta-canvas",
+                mouseControls: true,
+                touchControls: true,
+                color: 0x00ffa3,
+                backgroundColor: 0x030303,
+                points: 12.00,
+                maxDistance: 20.00,
+                spacing: 16.00
+            });
+
+            // Initialize Trends Chart
+            const lineCtx = document.getElementById('lineChart').getContext('2d');
+            const lineGrad = lineCtx.createLinearGradient(0, 0, 0, 300);
+            lineGrad.addColorStop(0, 'rgba(0, 255, 163, 0.3)');
+            lineGrad.addColorStop(1, 'rgba(0, 255, 163, 0)');
+
+            lineChart = new Chart(lineCtx, {
+                type: 'line',
+                data: {
+                    labels: Array(25).fill(''),
+                    datasets: [{
+                        data: Array(25).fill(null),
+                        borderColor: '#00ffa3',
+                        backgroundColor: lineGrad,
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 0
+                    }]
+                },
+                options: { 
+                    responsive: true, 
+                    maintainAspectRatio: false, 
+                    plugins: { legend: { display: false } },
+                    scales: { y: { display: false }, x: { display: false } }
+                }
+            });
+
+            // Initialize Allocation Chart (The PIE Fix)
+            const pieCtx = document.getElementById('pieChart').getContext('2d');
+            pieChart = new Chart(pieCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: [],
+                    datasets: [{
+                        data: [],
+                        backgroundColor: ['#00ffa3', '#00d1ff', '#ff4d4d', '#f1c40f', '#9b59b6', '#e74c3c', '#34495e'],
+                        borderWidth: 0,
+                        hoverOffset: 15
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '82%',
+                    plugins: { legend: { display: false } }
+                }
+            });
+
+            // Trigger Heartbeat
+            setInterval(heartbeat, 1800);
+            updatePrice();
+        };
+
+        // 3. CINEMATIC SCROLL LOGIC
+        window.onscroll = () => {
+            const scroll = window.scrollY;
+            const splash = document.getElementById('splash-text');
+            const dash = document.getElementById('main-dashboard');
+            
+            // Splash transforms
+            const scaleFactor = 1 + (scroll / 400);
+            const fadeFactor = 1 - (scroll / 500);
+            
+            splash.style.transform = `scale(${scaleFactor})`;
+            splash.style.opacity = fadeFactor;
+            document.getElementById('splash-subtext').style.opacity = fadeFactor;
+
+            // App Reveal
+            if(scroll > 300) {
+                dash.classList.add('visible');
+            } else {
+                dash.classList.remove('visible');
+            }
+        };
+
+        // 4. THE HEARTBEAT ENGINE (The Big Fix)
+        function heartbeat() {
+            const selector = document.getElementById('assetSelector');
+            const options = selector.options;
+            let currentPortfolioTotal = 0;
+            let pieLabels = [];
+            let pieData = [];
+
+            // A. Update hidden asset rates with upward drift
+            for(let opt of options) {
+                let base = parseFloat(opt.getAttribute('data-price'));
+                let drift = base * 0.00008; // Small upward bias
+                let jitter = (Math.random() - 0.45) * (base * 0.001); // 0.1% volatility
+                let newVal = base + jitter + drift;
+                opt.setAttribute('data-price', newVal.toFixed(4));
+            }
+
+            // B. Sync UI Table and Calculate Total
+            const rows = document.querySelectorAll('.asset-row');
+            rows.forEach(row => {
+                const symbol = row.querySelector('.tag').innerText;
+                const qtyText = row.querySelector('.row-qty').innerText;
+                const qty = parseFloat(qtyText) || 0;
+                
+                // Get updated price from hidden select
+                let livePrice = 0;
+                for(let opt of options) { if(opt.value === symbol) livePrice = parseFloat(opt.getAttribute('data-price')); }
+
+                if(livePrice > 0) {
+                    const rowTotal = qty * livePrice;
+                    currentPortfolioTotal += rowTotal;
+
+                    // UI Updates with FLICKER
+                    const priceCell = document.getElementById('live-price-' + symbol);
+                    const valCell = document.getElementById('live-val-' + symbol);
+                    
+                    priceCell.innerText = '$' + livePrice.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    valCell.innerText = '$' + rowTotal.toLocaleString(undefined, {minimumFractionDigits: 2});
+
+                    // Flicker logic
+                    const color = Math.random() > 0.45 ? 'var(--primary)' : 'var(--danger)';
+                    priceCell.style.color = color;
+                    setTimeout(() => { priceCell.style.color = ''; }, 600);
+
+                    // Add to Pie Data if holding quantity
+                    if(qty > 0) {
+                        pieLabels.push(symbol);
+                        pieData.push(rowTotal);
+                    }
+                }
+            });
+
+            // C. UPDATE HERO VALUE
+            const heroSpan = document.getElementById('headerTotalDisplay');
+            heroSpan.innerText = currentPortfolioTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            
+            // Pulse the hero number
+            heroSpan.style.color = '#fff';
+            setTimeout(() => { heroSpan.style.color = 'var(--primary)'; }, 200);
+
+            // D. SYNC CHARTS
+            // Line Chart Update
+            lineChart.data.datasets[0].data.push(currentPortfolioTotal);
+            lineChart.data.datasets[0].data.shift();
+            lineChart.update('none');
+
+            // Pie Chart Update (FIXED)
+            pieChart.data.labels = pieLabels;
+            pieChart.data.datasets[0].data = pieData;
+            pieChart.update();
+
+            // Sync Terminal
+            updatePrice();
+        }
+
+        // 5. TERMINAL UTILITIES
+        function updatePrice() {
+            const selector = document.getElementById('assetSelector');
+            const price = selector.options[selector.selectedIndex].getAttribute('data-price');
+            document.getElementById('hiddenPrice').value = price;
+            document.getElementById('marketPriceDisplay').innerText = '$' + parseFloat(price).toLocaleString(undefined, {minimumFractionDigits: 2});
+            updateTotal();
+        }
+
+        function updateTotal() {
+            const qty = document.getElementById('tradeQty').value || 0;
+            const price = document.getElementById('hiddenPrice').value;
+            const total = qty * price;
+            document.getElementById('totalTradeValue').innerText = '$' + total.toLocaleString(undefined, {minimumFractionDigits: 2});
+        }
+
+        function setTradeType(type) {
+            document.getElementById('tradeType').value = type;
+            const buyBtn = document.getElementById('buyBtn');
+            const sellBtn = document.getElementById('sellBtn');
+            const execBtn = document.getElementById('execBtn');
+            
+            if(type === 'BUY') {
+                buyBtn.style.background = 'var(--primary)'; buyBtn.style.color = '#000';
+                sellBtn.style.background = 'transparent'; sellBtn.style.color = '#fff';
+                execBtn.style.background = 'var(--primary)'; execBtn.innerText = 'Transmit Buy Order';
+            } else {
+                sellBtn.style.background = 'var(--danger)'; sellBtn.style.color = '#fff';
+                buyBtn.style.background = 'transparent'; buyBtn.style.color = '#fff';
+                execBtn.style.background = 'var(--danger)'; execBtn.innerText = 'Transmit Sell Order';
+            }
+        }
+
+        function updateClock() {
+            const now = new Date();
+            document.getElementById('currentTime').innerText = now.toLocaleString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        /*]]>*/
+    </script>
+</body>
+</html>

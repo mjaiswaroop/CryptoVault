@@ -1,0 +1,14 @@
+{
+    "configurations": [
+        {
+            "type": "java",
+            "name": "Spring Boot-CryptoVaultApplication<cryptovault>",
+            "request": "launch",
+            "cwd": "${workspaceFolder}",
+            "mainClass": "com.cryptovault.CryptoVaultApplication",
+            "projectName": "cryptovault",
+            "args": "",
+            "envFile": "${workspaceFolder}/.env"
+        }
+    ]
+}

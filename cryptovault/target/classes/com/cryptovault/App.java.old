@@ -1,0 +1,62 @@
+package com.cryptovault;
+
+import java.util.List;
+
+public class App {
+    
+    public static void main(String[] args) {
+        System.out.println("=== CryptoVault Backend Started ===\n");
+
+        try {
+            UserDAO userDAO = new UserDAO();
+            PortfolioDAO portfolioDAO = new PortfolioDAO();
+            AssetDAO assetDAO = new AssetDAO();
+            TransactionDAO transactionDAO = new TransactionDAO();
+
+            // Try to create user (will skip if email already exists)
+            int userId = userDAO.create("John Doe", "john@example.com", "password123");
+            if (userId == -1) {
+                System.out.println("User already exists. Using existing user.");
+                userId = 1; // fallback to first user
+            } else {
+                System.out.println("New User created with ID: " + userId);
+            }
+
+            // Create Portfolio
+            int portfolioId = portfolioDAO.create(userId, "My Crypto Portfolio");
+            if (portfolioId == -1) {
+                System.out.println("Portfolio already exists or failed. Using ID 1");
+                portfolioId = 1;
+            } else {
+                System.out.println("Portfolio created with ID: " + portfolioId);
+            }
+
+            // Add Assets (only if they don't exist yet - simple check)
+            System.out.println("Adding/Checking Assets...");
+            int assetId1 = assetDAO.create(portfolioId, "BTC", "Bitcoin", 0.5, 62000.0);
+            int assetId2 = assetDAO.create(portfolioId, "ETH", "Ethereum", 5.0, 3200.0);
+
+            System.out.println("BTC Asset ID: " + (assetId1 > 0 ? assetId1 : "Already exists"));
+            System.out.println("ETH Asset ID: " + (assetId2 > 0 ? assetId2 : "Already exists"));
+
+            // Record one transaction
+            int txId = transactionDAO.create(assetId1 > 0 ? assetId1 : 1, "BUY", 0.5, 62000.0, 31000.0);
+            System.out.println("Transaction recorded with ID: " + (txId > 0 ? txId : "Already exists or failed"));
+
+            // Display Assets
+            System.out.println("\n--- Assets in Portfolio " + portfolioId + " ---");
+            List<Asset> assets = assetDAO.getByPortfolioId(portfolioId);
+            for (Asset asset : assets) {
+                double total = asset.getQuantity() * asset.getPurchasePrice();
+                System.out.printf("%s - %.4f units @ $%.2f (Total: $%.2f)%n", 
+                    asset.getSymbol(), asset.getQuantity(), asset.getPurchasePrice(), total);
+            }
+
+            System.out.println("\n=== Test Completed Successfully! ===");
+
+        } catch (Exception e) {
+            System.err.println("Error during testing: " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+}
