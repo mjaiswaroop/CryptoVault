@@ -1,4 +1,5 @@
 package com.cryptovault;
+
 import org.springframework.stereotype.Repository;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -8,6 +9,7 @@ import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
+
 @Repository
 public class TransactionDAO {
 
@@ -113,5 +115,32 @@ public class TransactionDAO {
             e.printStackTrace();
         }
         return transactions;
+    }
+
+    /**
+     * Fetches recent cloud sync logs to feed into the UI Execution Terminal console
+     */
+    public List<CloudSyncLog> getCloudSyncLogs() {
+        List<CloudSyncLog> logs = new ArrayList<>();
+        String sql = "SELECT id, user_id, action, synced_at FROM cloud_sync_logs ORDER BY synced_at DESC LIMIT 50";
+
+        try (Connection conn = DatabaseConnection.getConnection();
+             PreparedStatement ps = conn.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+
+            while (rs.next()) {
+                CloudSyncLog log = new CloudSyncLog();
+                log.setId(rs.getInt("id"));
+                log.setUserId(rs.getInt("user_id"));
+                log.setAction(rs.getString("action"));
+                log.setSyncedAt(rs.getTimestamp("synced_at"));
+                
+                logs.add(log);
+            }
+        } catch (SQLException e) {
+            System.err.println("Error fetching cloud sync logs: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return logs;
     }
 }

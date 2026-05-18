@@ -1,25 +1,29 @@
 package com.cryptovault;
 
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
-
-import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.List;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 @Controller
 public class PortfolioController {
 
     private final AssetDAO assetDAO;
     private final PortfolioDAO portfolioDAO;
+    private final TransactionDAO transactionDAO;
 
-    public PortfolioController(AssetDAO assetDAO, PortfolioDAO portfolioDAO) {
+    // Clean Constructor Injection for all required data access objects
+    public PortfolioController(AssetDAO assetDAO, PortfolioDAO portfolioDAO, TransactionDAO transactionDAO) {
         this.assetDAO = assetDAO;
         this.portfolioDAO = portfolioDAO;
+        this.transactionDAO = transactionDAO;
     }
 
     @GetMapping("/")
@@ -30,10 +34,10 @@ public class PortfolioController {
     @GetMapping("/portfolio")
     public String showPortfolio(@RequestParam(name = "id", defaultValue = "1") Integer portfolioId, Model model) {
         
-        // 1. Fetch Dynamic Nav
+        // 1. Fetch Dynamic Navigation Elements
         model.addAttribute("portfolios", portfolioDAO.getByUser(1));
 
-        // 2. Fetch Assets and Calculate Value
+        // 2. Fetch Assets and Calculate Real-Time Value
         List<Asset> assets = new ArrayList<>();
         double totalValue = 0.0;
         try {
@@ -42,9 +46,11 @@ public class PortfolioController {
                 double price = (a.getCurrentPrice() > 0) ? a.getCurrentPrice() : a.getAveragePurchasePrice();
                 totalValue += a.getQuantity() * price;
             }
-        } catch (Exception e) { e.printStackTrace(); }
+        } catch (Exception e) { 
+            e.printStackTrace(); 
+        }
 
-        // 3. Line Chart Labels & Values
+        // 3. Line Chart Data Synthesis (Labels & Trend metrics)
         List<String> chartLabels = new ArrayList<>();
         List<Double> chartValues = new ArrayList<>();
         LocalDate today = LocalDate.now();
@@ -59,7 +65,7 @@ public class PortfolioController {
             }
         }
 
-        // 4. Pie Chart Data
+        // 4. Asset Allocation Chart Integration
         List<String> pieLabels = new ArrayList<>();
         List<Double> pieValues = new ArrayList<>();
         for (Asset a : assets) {
@@ -67,7 +73,7 @@ public class PortfolioController {
             pieValues.add(a.getQuantity() * a.getAveragePurchasePrice());
         }
 
-        // 5. Send to Model
+        // 5. Package UI Response Variables
         model.addAttribute("assets", assets);
         model.addAttribute("portfolioId", portfolioId);
         model.addAttribute("message", "CryptoVault Terminal");
@@ -88,10 +94,27 @@ public class PortfolioController {
                                @RequestParam(name = "price") double price) {
         try {
             double finalQty = type.equalsIgnoreCase("SELL") ? -quantity : quantity;
+            double totalValue = quantity * price;
+            
+            // 1. Persist mutation status inside your main vault asset holdings tracker
             assetDAO.addOrUpdateAsset(portfolioId, symbol, "Digital Asset", finalQty, price, "CRYPTO");
+            
+            // 2. Fire record into transactions table to invoke the MySQL trigger sequence automatically
+            // Uses a default asset lookup mapping of 1 for sandbox asset testing constraints
+            transactionDAO.create(1, type.toUpperCase(), quantity, price, totalValue);
+            
         } catch (Exception e) {
             e.printStackTrace();
         }
         return "redirect:/portfolio?id=" + portfolioId;
+    }
+
+    /**
+     * JSON REST API endpoint supplying cloud synchronization activities directly to the dashboard canvas console
+     */
+    @GetMapping("/api/logs")
+    @ResponseBody
+    public List<CloudSyncLog> getSystemLogs() {
+        return transactionDAO.getCloudSyncLogs();
     }
 }

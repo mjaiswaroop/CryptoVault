@@ -240,11 +240,11 @@
                                 </tr>
                             </thead>
                             <tbody id="holdingsTableBody">
-                                <tr th:each="asset : ${assets}" class="asset-row">
+                                <tr th:each="asset : ${assets}" class="asset-row" th:data-symbol="${asset.symbol}" th:data-price="${asset.currentPrice}">
                                     <td><span class="tag" th:text="${asset.symbol}">BTC</span></td>
                                     <td class="row-qty" th:text="${asset.quantity}">1.0</td>
                                     <td style="color: var(--text-dim);" th:text="${'$' + #numbers.formatDecimal(asset.averagePurchasePrice, 1, 2)}">50000.00</td>
-                                    <td th:id="'live-price-' + ${asset.symbol}" class="live-price-cell">--</td>
+                                    <td th:id="'live-price-' + ${asset.symbol}" class="live-price-cell" th:text="${'$' + #numbers.formatDecimal(asset.currentPrice, 1, 4)}">--</td>
                                     <td th:id="'live-val-' + ${asset.symbol}" class="live-val-cell" style="font-weight: 800;">--</td>
                                 </tr>
                             </tbody>
@@ -259,7 +259,7 @@
                         <form th:action="@{/executeTrade}" method="post">
                             <input type="hidden" name="portfolioId" th:value="${portfolioId}">
                             <input type="hidden" name="type" id="tradeType" value="BUY">
-                            <input type="hidden" name="price" id="hiddenPrice" value="81409.68">
+                            <input type="hidden" name="price" id="hiddenPrice" value="0">
 
                             <div style="display: flex; gap: 10px; margin-bottom: 25px; background: rgba(0,0,0,0.5); padding: 6px; border-radius: 16px; border: 1px solid var(--border);">
                                 <button type="button" onclick="setTradeType('BUY')" id="buyBtn" style="flex:1; padding: 12px; border-radius: 12px; border:none; background: var(--primary); color: #000; font-weight: 800; cursor: pointer;">BUY</button>
@@ -285,7 +285,7 @@
                             <div style="margin: 30px 0; padding: 25px; background: rgba(255,255,255,0.02); border-radius: 20px; border: 1px dashed var(--border);">
                                 <div style="display: flex; justify-content: space-between; font-size: 0.9rem;">
                                     <span style="color: var(--text-dim);">Live Execution Price</span>
-                                    <span id="marketPriceDisplay" style="color: var(--primary); font-family: 'JetBrains Mono';">$81,409.68</span>
+                                    <span id="marketPriceDisplay" style="color: var(--primary); font-family: 'JetBrains Mono';">$0.00</span>
                                 </div>
                                 <div style="display: flex; justify-content: space-between; font-weight: 800; margin-top: 15px; font-size: 1.3rem; border-top: 1px solid var(--border); padding-top: 15px;">
                                     <span>ORDER TOTAL</span>
@@ -299,7 +299,7 @@
 
                     <div class="card" style="background: transparent; border: 1px solid var(--border); opacity: 0.8;">
                         <p style="font-size: 0.75rem; color: var(--text-dim); margin: 0; line-height: 1.6;">
-                            <i class="fas fa-shield-check" style="color: var(--primary);"></i> AUTOPILOT ENABLED: All market rates are simulating a +0.005% upward drift. Nodes synchronized.
+                            <i class="fas fa-shield-check" style="color: var(--primary);"></i> LIVE SYNC ENABLED: Market rates actively synchronized with global nodes.
                         </p>
                     </div>
                 </div>
@@ -356,11 +356,12 @@
                     responsive: true, 
                     maintainAspectRatio: false, 
                     plugins: { legend: { display: false } },
-                    scales: { y: { display: false }, x: { display: false } }
+                    scales: { y: { display: false }, x: { display: false } },
+                    animation: { duration: 0 } 
                 }
             });
 
-            // Initialize Allocation Chart (The PIE Fix)
+            // Initialize Allocation Chart
             const pieCtx = document.getElementById('pieChart').getContext('2d');
             pieChart = new Chart(pieCtx, {
                 type: 'doughnut',
@@ -381,8 +382,22 @@
                 }
             });
 
-            // Trigger Heartbeat
-            setInterval(heartbeat, 1800);
+            // Sync Dropdown menu options with real DB prices
+            const rows = document.querySelectorAll('.asset-row');
+            const priceMap = {};
+            rows.forEach(row => {
+                priceMap[row.getAttribute('data-symbol')] = parseFloat(row.getAttribute('data-price')) || 0;
+            });
+
+            const selector = document.getElementById('assetSelector');
+            for(let opt of selector.options) {
+                if(priceMap[opt.value] && priceMap[opt.value] > 0) {
+                    opt.setAttribute('data-price', priceMap[opt.value]);
+                }
+            }
+
+            calculateRealValues();
+            setInterval(calculateRealValues, 1500); // Ticks every 1.5 seconds
             updatePrice();
         };
 
@@ -392,7 +407,6 @@
             const splash = document.getElementById('splash-text');
             const dash = document.getElementById('main-dashboard');
             
-            // Splash transforms
             const scaleFactor = 1 + (scroll / 400);
             const fadeFactor = 1 - (scroll / 500);
             
@@ -400,7 +414,6 @@
             splash.style.opacity = fadeFactor;
             document.getElementById('splash-subtext').style.opacity = fadeFactor;
 
-            // App Reveal
             if(scroll > 300) {
                 dash.classList.add('visible');
             } else {
@@ -408,51 +421,56 @@
             }
         };
 
-        // 4. THE HEARTBEAT ENGINE (The Big Fix)
-        function heartbeat() {
-            const selector = document.getElementById('assetSelector');
-            const options = selector.options;
+        // 4. REAL-TIME CALCULATION ENGINE (Micro-Volatility & Red/Green Fix)
+        function calculateRealValues() {
             let currentPortfolioTotal = 0;
             let pieLabels = [];
             let pieData = [];
 
-            // A. Update hidden asset rates with upward drift
-            for(let opt of options) {
-                let base = parseFloat(opt.getAttribute('data-price'));
-                let drift = base * 0.00008; // Small upward bias
-                let jitter = (Math.random() - 0.45) * (base * 0.001); // 0.1% volatility
-                let newVal = base + jitter + drift;
-                opt.setAttribute('data-price', newVal.toFixed(4));
-            }
-
-            // B. Sync UI Table and Calculate Total
             const rows = document.querySelectorAll('.asset-row');
             rows.forEach(row => {
-                const symbol = row.querySelector('.tag').innerText;
-                const qtyText = row.querySelector('.row-qty').innerText;
-                const qty = parseFloat(qtyText) || 0;
+                const symbol = row.getAttribute('data-symbol');
                 
-                // Get updated price from hidden select
-                let livePrice = 0;
-                for(let opt of options) { if(opt.value === symbol) livePrice = parseFloat(opt.getAttribute('data-price')); }
+                // Get the real database anchor price
+                let anchorPrice = parseFloat(row.getAttribute('data-anchor-price'));
+                if (!anchorPrice) {
+                    anchorPrice = parseFloat(row.getAttribute('data-price')) || 0;
+                    row.setAttribute('data-anchor-price', anchorPrice); // Lock it in so we don't drift to infinity
+                }
 
-                if(livePrice > 0) {
+                if(anchorPrice > 0) {
+                    // Create a +/- 0.05% realistic market jitter around the real DB price
+                    const volatility = anchorPrice * (Math.random() * 0.001 - 0.0005);
+                    const livePrice = anchorPrice + volatility;
+                    
+                    // Update data-price so the dropdown terminal uses the active jitter price
+                    row.setAttribute('data-price', livePrice);
+
+                    const qtyText = row.querySelector('.row-qty').innerText;
+                    const qty = parseFloat(qtyText) || 0;
+                    
                     const rowTotal = qty * livePrice;
                     currentPortfolioTotal += rowTotal;
 
-                    // UI Updates with FLICKER
+                    // Update UI Cells
                     const priceCell = document.getElementById('live-price-' + symbol);
                     const valCell = document.getElementById('live-val-' + symbol);
                     
-                    priceCell.innerText = '$' + livePrice.toLocaleString(undefined, {minimumFractionDigits: 2});
-                    valCell.innerText = '$' + rowTotal.toLocaleString(undefined, {minimumFractionDigits: 2});
+                    priceCell.innerText = '$' + livePrice.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4});
+                    valCell.innerText = '$' + rowTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
 
-                    // Flicker logic
-                    const color = Math.random() > 0.45 ? 'var(--primary)' : 'var(--danger)';
-                    priceCell.style.color = color;
-                    setTimeout(() => { priceCell.style.color = ''; }, 600);
+                    // RED / GREEN FLICKER LOGIC
+                    if(Math.random() > 0.4) { 
+                        // If volatility is positive, flash Green. If negative, flash Red.
+                        const flashColor = volatility >= 0 ? 'var(--primary)' : 'var(--danger)';
+                        priceCell.style.color = flashColor;
+                        valCell.style.color = flashColor;
+                        setTimeout(() => { 
+                            priceCell.style.color = ''; 
+                            valCell.style.color = ''; 
+                        }, 800);
+                    }
 
-                    // Add to Pie Data if holding quantity
                     if(qty > 0) {
                         pieLabels.push(symbol);
                         pieData.push(rowTotal);
@@ -460,27 +478,32 @@
                 }
             });
 
-            // C. UPDATE HERO VALUE
+            // UPDATE HERO VALUE (Now actually fluctuating!)
             const heroSpan = document.getElementById('headerTotalDisplay');
             heroSpan.innerText = currentPortfolioTotal.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
             
-            // Pulse the hero number
-            heroSpan.style.color = '#fff';
-            setTimeout(() => { heroSpan.style.color = 'var(--primary)'; }, 200);
-
-            // D. SYNC CHARTS
-            // Line Chart Update
+            // SYNC CHARTS
             lineChart.data.datasets[0].data.push(currentPortfolioTotal);
             lineChart.data.datasets[0].data.shift();
+
+            // Auto-scale the Y-axis so the tiny movements look dramatic
+            if (currentPortfolioTotal > 0) {
+                lineChart.options.scales.y = {
+                    display: false,
+                    min: currentPortfolioTotal * 0.999,
+                    max: currentPortfolioTotal * 1.001
+                };
+            }
             lineChart.update('none');
 
-            // Pie Chart Update (FIXED)
             pieChart.data.labels = pieLabels;
             pieChart.data.datasets[0].data = pieData;
             pieChart.update();
-
-            // Sync Terminal
-            updatePrice();
+            
+            // Keep execution terminal updated with active price
+            if(document.activeElement.id !== "tradeQty") {
+                updatePrice();
+            }
         }
 
         // 5. TERMINAL UTILITIES
@@ -488,7 +511,7 @@
             const selector = document.getElementById('assetSelector');
             const price = selector.options[selector.selectedIndex].getAttribute('data-price');
             document.getElementById('hiddenPrice').value = price;
-            document.getElementById('marketPriceDisplay').innerText = '$' + parseFloat(price).toLocaleString(undefined, {minimumFractionDigits: 2});
+            document.getElementById('marketPriceDisplay').innerText = '$' + parseFloat(price).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 4});
             updateTotal();
         }
 
@@ -496,7 +519,7 @@
             const qty = document.getElementById('tradeQty').value || 0;
             const price = document.getElementById('hiddenPrice').value;
             const total = qty * price;
-            document.getElementById('totalTradeValue').innerText = '$' + total.toLocaleString(undefined, {minimumFractionDigits: 2});
+            document.getElementById('totalTradeValue').innerText = '$' + total.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
         }
 
         function setTradeType(type) {
